@@ -32,25 +32,25 @@ export default function CyberSecurityLaunchPage() {
   })
 
   const [learnerCount, setLearnerCount] = useState<number>(START_COUNT)
-  const [targetCount, setTargetCount] = useState<number | null>(null)
+  const [targetCount] = useState<number>(127) // choose any number
 
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // 🔹 Fetch real visitor count (once on page load)
-  useEffect(() => {
-    const fetchVisitors = async () => {
-      try {
-        const res = await fetch("/api/visit")
-        const data = await res.json()
-        setTargetCount(data.visitors)
-      } catch (error) {
-        console.error("Failed to fetch visitor count")
-      }
-    }
+  // useEffect(() => {
+  //   const fetchVisitors = async () => {
+  //     try {
+  //       const res = await fetch("/api/visit")
+  //       const data = await res.json()
+  //       setTargetCount(data.visitors)
+  //     } catch (error) {
+  //       console.error("Failed to fetch visitor count")
+  //     }
+  //   }
 
-    fetchVisitors()
-  }, [])
+  //   fetchVisitors()
+  // }, [])
 
   // 🔹 Animate from 1 → real visitor count
   useEffect(() => {
@@ -282,7 +282,7 @@ export default function CyberSecurityLaunchPage() {
 
 
                       <h3 className="text-xl font-bold text-slate-900">
-                        A small note from Sanjay
+                        A small note from Sanjay Singh
                       </h3>
                     </div>
 

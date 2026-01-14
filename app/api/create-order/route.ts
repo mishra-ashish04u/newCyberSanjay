@@ -1,78 +1,115 @@
 import { createClient } from "@/lib/supabase/server"
-import { type NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, productIds, amount } = body
 
-    if (!userId || !productIds || !amount) {
-      return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 })
+    const { productIds, amount, customerEmail } = body
+
+    // ✅ Validate input
+    if (!productIds || !amount || !customerEmail) {
+      return NextResponse.json(
+        { success: false, message: "Missing required fields" },
+        { status: 400 }
+      )
     }
 
+    // ✅ Create Supabase client
     const supabase = await createClient()
 
-    // Create Cashfree order
-    const orderId = `order_${Date.now()}_${userId.substring(0, 8)}`
+    // ✅ Guest-safe order id
+    const cashfreeOrderId = `order_${Date.now()}`
 
-    const cashfreeResponse = await fetch("https://api.cashfree.com/pg/orders", {
-      method: "POST",
-      headers: {
-        "X-Api-Version": "2023-08-01",
-        "X-Client-Id": process.env.CASHFREE_APP_ID || "",
-        "X-Client-Secret": process.env.CASHFREE_SECRET_KEY || "",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        order_amount: amount,
-        order_currency: "INR",
-        order_id: orderId,
-        customer_details: {
-          customer_id: userId,
-          customer_email: "user@example.com",
-          customer_phone: "9999999999",
+    // ✅ Correct Cashfree base URL
+    const CASHFREE_BASE_URL =
+      process.env.CASHFREE_ENV === "TEST"
+        ? "https://sandbox.cashfree.com"
+        : "https://api.cashfree.com"
+
+    // ✅ Create order in Cashfree
+    const cashfreeResponse = await fetch(
+      `${CASHFREE_BASE_URL}/pg/orders`,
+      {
+        method: "POST",
+        headers: {
+          "x-api-version": "2022-09-01",
+          "x-client-id": process.env.CASHFREE_APP_ID!,
+          "x-client-secret": process.env.CASHFREE_SECRET_KEY!,
+          "Content-Type": "application/json",
         },
-        order_meta: {
-          return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/payment-success?order_id=${orderId}`,
-          notify_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhook/cashfree`,
-        },
-      }),
-    })
+        body: JSON.stringify({
+          order_id: cashfreeOrderId,
+          order_amount: Number(amount),
+          order_currency: "INR",
+          customer_details: {
+            customer_id: customerEmail,
+            customer_email: customerEmail,
+            customer_phone: "9999999999",
+          },
+          order_meta: {
+            return_url: `${
+              process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+            }/payment-success?order_id=${cashfreeOrderId}`,
+          },
+        }),
+      }
+    )
 
     const cashfreeData = await cashfreeResponse.json()
 
+    // 🔴 IMPORTANT: log real Cashfree error
+    if (!cashfreeResponse.ok) {
+      console.error("Cashfree API Error:", cashfreeData)
+      return NextResponse.json(
+        {
+          success: false,
+          message: cashfreeData.message || "Cashfree order creation failed",
+        },
+        { status: 500 }
+      )
+    }
+
+    // ✅ Ensure session id exists
     if (!cashfreeData.payment_session_id) {
-      throw new Error("Failed to create Cashfree order")
+      console.error("Cashfree response:", cashfreeData)
+      return NextResponse.json(
+        { success: false, message: "Payment session not generated" },
+        { status: 500 }
+      )
     }
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        user_id: userId,
-        product_id: productIds[0],
-        amount,
-        cashfree_order_id: orderId,
-        status: "pending",
-      })
-      .select()
-      .single()
+    // ✅ Store order (guest mode)
+    const { error } = await supabase.from("orders").insert({
+      user_id: null,
+      product_id: productIds[0],
+      amount,
+      cashfree_order_id: cashfreeOrderId,
+      status: "pending",
+      email: customerEmail,
+    })
 
-    if (orderError) {
-      throw new Error(orderError.message)
+    if (error) {
+      console.error("Supabase insert error:", error)
+      return NextResponse.json(
+        { success: false, message: "Database error" },
+        { status: 500 }
+      )
     }
 
+    // ✅ Success response
     return NextResponse.json({
       success: true,
       data: {
         sessionId: cashfreeData.payment_session_id,
-        orderId: order.id,
+        orderId: cashfreeOrderId,
       },
     })
   } catch (error) {
     console.error("Order creation error:", error)
     return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : "Failed to create order" },
-      { status: 500 },
+      { success: false, message: "Failed to create order" },
+      { status: 500 }
     )
   }
 }

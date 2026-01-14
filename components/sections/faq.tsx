@@ -34,29 +34,42 @@ export function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   return (
-    <section id="faq" className="px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+    <section
+      id="faq"
+      className="px-4 sm:px-6 lg:px-8 py-20 md:py-28 bg-[#FFF9E6]"
+    >
       <div className="max-w-3xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-bold text-foreground text-balance mb-12 text-center">
+        <h2 className="text-3xl md:text-5xl font-bold text-[#1F2937] mb-12 text-center">
           Frequently Asked Questions
         </h2>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {faqs.map((faq, index) => (
-            <div key={index} className="border border-border rounded-lg overflow-hidden">
+            <div
+              key={index}
+              className="border border-yellow-200 rounded-xl overflow-hidden bg-white shadow-sm"
+            >
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full px-6 py-4 flex items-center justify-between bg-card hover:bg-muted/50 transition"
+                className="w-full px-6 py-5 flex items-center justify-between text-left
+                           hover:bg-yellow-50 transition"
               >
-                <span className="font-semibold text-foreground text-left">{faq.question}</span>
+                <span className="font-semibold text-[#1F2937]">
+                  {faq.question}
+                </span>
+
                 <ChevronDown
-                  className={`w-5 h-5 text-muted-foreground transition-transform ${
+                  className={`w-5 h-5 text-yellow-600 transition-transform ${
                     openIndex === index ? "rotate-180" : ""
                   }`}
                 />
               </button>
+
               {openIndex === index && (
-                <div className="px-6 py-4 bg-muted/30 border-t border-border">
-                  <p className="text-muted-foreground">{faq.answer}</p>
+                <div className="px-6 py-4 bg-yellow-50 border-t border-yellow-200">
+                  <p className="text-gray-700 leading-relaxed">
+                    {faq.answer}
+                  </p>
                 </div>
               )}
             </div>
