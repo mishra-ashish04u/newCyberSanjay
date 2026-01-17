@@ -1,102 +1,119 @@
 "use client"
 
-import type React from "react"
-
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import {
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+} from "firebase/auth"
+import { auth } from "@/lib/firebase"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  /* ================= EMAIL LOGIN ================= */
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
-    setIsLoading(true)
-    setError(null)
+    setError("")
+    setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const result = await signInWithEmailAndPassword(
+        auth,
         email,
-        password,
-      })
-      if (error) throw error
+        password
+      )
+
+      // Email not verified → redirect
+      if (!result.user.emailVerified) {
+        router.push("/auth/verify-email")
+        return
+      }
+
       router.push("/dashboard")
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "Failed to log in")
+    } catch (err: any) {
+      setError("Invalid email or password")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
+    }
+  }
+
+  /* ================= GOOGLE LOGIN ================= */
+  const handleGoogleLogin = async () => {
+    setError("")
+    setLoading(true)
+
+    try {
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
+      router.push("/dashboard")
+    } catch (err: any) {
+      setError("Google login failed")
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-4 md:p-10">
-      <div className="w-full max-w-sm">
-        <Card className="border-border">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">Log In</CardTitle>
-            <CardDescription>Access your learning dashboard and purchases</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Your password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-input"
-                />
-              </div>
+    <main className="min-h-screen flex items-center justify-center bg-yellow-50">
+      <div className="w-full max-w-md p-6 border border-yellow-200 rounded-xl shadow-md bg-white">
+        <h1 className="text-2xl font-bold mb-1 text-gray-900">
+          Login to Cyber Sanjay
+        </h1>
+        <p className="text-sm text-gray-600 mb-4">
+          Continue your cybersecurity journey
+        </p>
 
-              {error && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">{error}</div>}
+        {error && (
+          <p className="text-red-600 text-sm mb-3">{error}</p>
+        )}
 
-              <Button
-                type="submit"
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                disabled={isLoading}
-              >
-                {isLoading ? "Logging in..." : "Log In"}
-              </Button>
+        <form onSubmit={handleEmailLogin} className="space-y-3">
+          <input
+            type="email"
+            placeholder="Email address"
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-              <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{" "}
-                <Link href="/auth/sign-up" className="text-primary hover:underline font-medium">
-                  Sign up here
-                </Link>
-              </p>
-            </form>
-          </CardContent>
-        </Card>
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-yellow-400 text-black py-2 rounded font-medium hover:bg-yellow-500 transition"
+          >
+            {loading ? "Logging in..." : "Login"}
+          </button>
+        </form>
+
+        <div className="my-4 text-center text-xs text-gray-500">
+          OR
+        </div>
+
+        <button
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full border border-gray-300 py-2 rounded hover:bg-yellow-50 transition"
+        >
+          Continue with Google
+        </button>
       </div>
-    </div>
+    </main>
   )
 }

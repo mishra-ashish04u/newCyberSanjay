@@ -1,143 +1,165 @@
 "use client"
 
-import type React from "react"
-
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendEmailVerification,
+} from "firebase/auth"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { auth, db } from "@/lib/firebase"
 
 export default function SignUpPage() {
+  const router = useRouter()
+
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
-  }
-
-  const handleSignUp = async (e: React.FormEvent) => {
+  /* ================= EMAIL + PASSWORD SIGNUP ================= */
+  const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    setError(null)
-
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address")
-      setIsLoading(false)
-      return
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters")
-      setIsLoading(false)
-      return
-    }
+    setError("")
+    setLoading(true)
 
     try {
-      const supabase = createClient()
-
-      const { error: signUpError } = await supabase.auth.signUp({
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
         email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+        password
+      )
+
+      const user = userCredential.user
+
+      // Save name in Firebase Auth
+      await updateProfile(user, {
+        displayName: name,
+      })
+
+      // Send verification email (OTP-style)
+      await sendEmailVerification(user)
+
+      // Save minimal user record in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        name,
+        email,
+        meta: {
+          signupMethod: "email",
+          emailVerified: false,
+          createdAt: serverTimestamp(),
         },
       })
 
-      if (signUpError) throw signUpError
-
-      router.push("/auth/sign-up-success")
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred during signup")
+      // Redirect to verify email page
+      router.push("/auth/verify-email")
+    } catch (err: any) {
+      setError(err.message || "Signup failed")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
+    }
+  }
+
+  /* ================= GOOGLE SIGNUP ================= */
+  const handleGoogleSignUp = async () => {
+    setError("")
+    setLoading(true)
+
+    try {
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
+      const user = result.user
+
+      // Google users are already verified
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          name: user.displayName,
+          email: user.email,
+          meta: {
+            signupMethod: "google",
+            emailVerified: true,
+            createdAt: serverTimestamp(),
+          },
+        },
+        { merge: true }
+      )
+
+      router.push("/dashboard")
+    } catch (err: any) {
+      setError(err.message || "Google signup failed")
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-4 md:p-10">
-      <div className="w-full max-w-sm">
-        <Card className="border-border">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">Create Your Account</CardTitle>
-            <CardDescription>Access your purchases anytime from your dashboard</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium">
-                  Name
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Your full name"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="bg-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="At least 6 characters"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-input"
-                />
-              </div>
+    <main className="min-h-screen flex items-center justify-center bg-yellow-50">
+      <div className="w-full max-w-md p-6 border border-yellow-200 rounded-xl shadow-md bg-white">
+        <h1 className="text-2xl font-bold mb-1 text-gray-900">
+          Create your account
+        </h1>
+        <p className="text-sm text-gray-600 mb-4">
+          Start your cybersecurity journey with <span className="font-semibold text-yellow-600">Cyber Sanjay</span>
+        </p>
 
-              {error && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">{error}</div>}
+        {error && (
+          <p className="text-red-600 text-sm mb-3">{error}</p>
+        )}
 
-              <Button
-                type="submit"
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                disabled={isLoading}
-              >
-                {isLoading ? "Creating account..." : "Create Account"}
-              </Button>
+        <form onSubmit={handleEmailSignUp} className="space-y-3">
+          <input
+            type="text"
+            placeholder="Full name"
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
 
-              <p className="text-center text-sm text-muted-foreground">
-                Already have an account?{" "}
-                <Link href="/auth/login" className="text-primary hover:underline font-medium">
-                  Log in here
-                </Link>
-              </p>
-            </form>
-          </CardContent>
-        </Card>
+          <input
+            type="email"
+            placeholder="Email address"
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-yellow-400 text-black py-2 rounded font-medium hover:bg-yellow-500 transition"
+          >
+            {loading ? "Creating account..." : "Create account"}
+          </button>
+        </form>
+
+        <div className="my-4 text-center text-xs text-gray-500">
+          OR
+        </div>
+
+        <button
+          onClick={handleGoogleSignUp}
+          disabled={loading}
+          className="w-full border border-gray-300 py-2 rounded hover:bg-yellow-50 transition"
+        >
+          Continue with Google
+        </button>
       </div>
-    </div>
+    </main>
   )
 }

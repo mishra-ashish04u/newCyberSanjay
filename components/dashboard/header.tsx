@@ -1,32 +1,32 @@
 "use client"
 
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
+import { onAuthStateChanged, signOut, User } from "firebase/auth"
+import { auth } from "@/lib/firebase"
 
 export function DashboardHeader() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    const getUser = async () => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser)
       setIsLoading(false)
-    }
 
-    getUser()
-  }, [])
+      if (!firebaseUser) {
+        router.push("/auth/login")
+      }
+    })
+
+    return () => unsubscribe()
+  }, [router])
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await signOut(auth)
     router.push("/")
   }
 
@@ -37,17 +37,29 @@ export function DashboardHeader() {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-lg">⚡</span>
           </div>
-          <Link href="/dashboard" className="font-bold text-lg text-foreground hover:opacity-80">
+          <Link
+            href="/dashboard"
+            className="font-bold text-lg text-foreground hover:opacity-80"
+          >
             Cyber Sanjay
           </Link>
         </div>
+
         <nav className="flex items-center gap-4">
-          <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition">
+          <Link
+            href="/dashboard"
+            className="text-sm text-muted-foreground hover:text-foreground transition"
+          >
             Dashboard
           </Link>
-          <Link href="/downloads" className="text-sm text-muted-foreground hover:text-foreground transition">
+
+          <Link
+            href="/downloads"
+            className="text-sm text-muted-foreground hover:text-foreground transition"
+          >
             My Products
           </Link>
+
           <Button
             onClick={handleLogout}
             variant="outline"
