@@ -1,7 +1,28 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { CheckCircle, Sparkles, ArrowRight, Shield, FileText, Zap } from "lucide-react"
+import { CheckCircle, Sparkles, Shield, FileText, Zap } from "lucide-react"
+import { CheckoutButton } from "@/components/payment/checkout-button"
+// Define your products
+const PRODUCTS = {
+  starterKit: {
+    id: 'starter-kit',
+    name: 'Starter Kit - Ethical Hacking Roadmap',
+    amount: 99,
+    description: '7-Day ethical hacking roadmap PDF with training guidance'
+  },
+  resumePack: {
+    id: 'resume-pack',
+    name: 'Resume Pack - Professional Templates',
+    amount: 99,
+    description: 'Professional resume templates with sample points'
+  },
+  bundle: {
+    id: 'complete-bundle',
+    name: 'Complete Bundle - Both Courses',
+    amount: 149,
+    description: 'Both PDF courses with lifetime access and priority support'
+  }
+}
 
 export function CoursesSection() {
   return (
@@ -60,12 +81,12 @@ export function CoursesSection() {
               </li>
             </ul>
 
-            <Button 
-              variant="outline"
+            <CheckoutButton
+              product={PRODUCTS.starterKit}
               className="w-full border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 font-semibold py-5 rounded-lg text-sm"
             >
               Buy Now — ₹99
-            </Button>
+            </CheckoutButton>
           </div>
 
           {/* Card 2: Resume Pack */}
@@ -98,12 +119,12 @@ export function CoursesSection() {
               </li>
             </ul>
 
-            <Button 
-              variant="outline"
+            <CheckoutButton
+              product={PRODUCTS.resumePack}
               className="w-full border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 font-semibold py-5 rounded-lg text-sm"
             >
               Buy Now — ₹99
-            </Button>
+            </CheckoutButton>
           </div>
 
           {/* Card 3: Bundle (BEST VALUE) */}
@@ -144,11 +165,12 @@ export function CoursesSection() {
               </li>
             </ul>
 
-            <Button 
+            <CheckoutButton
+              product={PRODUCTS.bundle}
               className="w-full bg-black hover:bg-gray-900 text-yellow-400 font-bold py-5 rounded-lg shadow-lg text-sm"
             >
               Buy Now — ₹149
-            </Button>
+            </CheckoutButton>
           </div>
 
         </div>

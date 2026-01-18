@@ -17,7 +17,7 @@ export function Footer() {
       url: "https://t.me/icybersanjay",
     },
     { 
-      label: "YouTube",
+      label: "Instagram",
       url: "#",
     },
   ]
