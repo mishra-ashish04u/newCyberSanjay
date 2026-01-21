@@ -1,112 +1,295 @@
 "use client"
 
 import { useEffect, useState, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
-import { CheckCircle, Download, Loader2 } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { CheckCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, updateProfile } from "firebase/auth"
+import { auth, db } from "@/lib/firebase"
+import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp, deleteDoc } from "firebase/firestore"
 
-// Separate component that uses useSearchParams
 function PaymentSuccessContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const orderId = searchParams.get('order_id')
-  const [verifying, setVerifying] = useState(true)
-  const [verified, setVerified] = useState(false)
+  
+  const [loading, setLoading] = useState(true)
+  const [pendingPurchase, setPendingPurchase] = useState<any>(null)
+  const [showAccountForm, setShowAccountForm] = useState(false)
+  const [isLogin, setIsLogin] = useState(false)
+  
+  // Form states
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     if (orderId) {
-      verifyPayment(orderId)
+      loadPendingPurchase()
     }
   }, [orderId])
 
-  const verifyPayment = async (orderId: string) => {
+  const loadPendingPurchase = async () => {
     try {
-      const response = await fetch('/api/payment/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId })
-      })
-
-      const data = await response.json()
+      const purchaseDoc = await getDoc(doc(db, 'pending_purchases', orderId!))
       
-      if (data.success && data.status === 'SUCCESS') {
-        setVerified(true)
+      if (purchaseDoc.exists()) {
+        const data = purchaseDoc.data()
+        setPendingPurchase(data)
+        
+        if (!data.accountLinked) {
+          setShowAccountForm(true)
+        } else {
+          router.push('/dashboard')
+        }
       }
     } catch (error) {
-      console.error('Verification error:', error)
+      console.error('Error loading purchase:', error)
     } finally {
-      setVerifying(false)
+      setLoading(false)
     }
   }
 
-  if (verifying) {
+  const linkPurchaseToUser = async (userId: string) => {
+    try {
+      // Move from pending to user's purchases
+      await setDoc(doc(db, 'users', userId, 'purchases', orderId!), {
+        courseId: pendingPurchase.courseId,
+        amount: pendingPurchase.amount,
+        purchaseDate: pendingPurchase.createdAt,
+        orderId: orderId,
+        status: 'active'
+      })
+      
+      // Mark as linked
+      await setDoc(doc(db, 'pending_purchases', orderId!), {
+        ...pendingPurchase,
+        accountLinked: true,
+        linkedUserId: userId,
+        linkedAt: serverTimestamp()
+      }, { merge: true })
+      
+      console.log('✅ Purchase linked to user')
+      router.push('/dashboard')
+    } catch (error) {
+      console.error('Error linking purchase:', error)
+    }
+  }
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setProcessing(true)
+
+    try {
+      const userCred = await createUserWithEmailAndPassword(
+        auth,
+        pendingPurchase.customerEmail,
+        password
+      )
+      
+      await updateProfile(userCred.user, {
+        displayName: pendingPurchase.customerName
+      })
+      
+      await setDoc(doc(db, 'users', userCred.user.uid), {
+        name: pendingPurchase.customerName,
+        email: pendingPurchase.customerEmail,
+        phone: pendingPurchase.customerPhone,
+        createdAt: serverTimestamp()
+      })
+      
+      await linkPurchaseToUser(userCred.user.uid)
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Email already exists. Please login instead.')
+        setIsLogin(true)
+      } else {
+        setError(err.message)
+      }
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setProcessing(true)
+
+    try {
+      const userCred = await signInWithEmailAndPassword(
+        auth,
+        pendingPurchase.customerEmail,
+        password
+      )
+      
+      await linkPurchaseToUser(userCred.user.uid)
+    } catch (err: any) {
+      setError('Invalid password')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleGoogleAuth = async () => {
+    setError("")
+    setProcessing(true)
+
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ login_hint: pendingPurchase.customerEmail })
+      
+      const result = await signInWithPopup(auth, provider)
+      
+      await setDoc(doc(db, 'users', result.user.uid), {
+        name: result.user.displayName,
+        email: result.user.email,
+        createdAt: serverTimestamp()
+      }, { merge: true })
+      
+      await linkPurchaseToUser(result.user.uid)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center">
+        <Loader2 className="w-16 h-16 text-yellow-600 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!pendingPurchase) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center px-4">
         <div className="text-center">
-          <Loader2 className="w-16 h-16 text-yellow-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Verifying Payment...</h2>
-          <p className="text-gray-600">Please wait while we confirm your purchase</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Order Not Found</h1>
+          <Button onClick={() => router.push('/')}>Go Home</Button>
         </div>
       </div>
     )
   }
 
+  if (!showAccountForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center">
+        <Loader2 className="w-16 h-16 text-yellow-600 animate-spin" />
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white border-2 border-yellow-300 rounded-2xl p-8 text-center">
+    <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center px-4 py-8">
+      <div className="max-w-md w-full">
         
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-12 h-12 text-green-600" />
+        {/* Success Message */}
+        <div className="bg-white border-2 border-green-300 rounded-2xl p-6 mb-6 text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-10 h-10 text-green-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
+          <p className="text-gray-600 mb-4">Order ID: {orderId}</p>
+          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3">
+            <p className="text-sm font-semibold text-gray-700">Amount Paid: ₹{pendingPurchase.amount}</p>
+          </div>
         </div>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
-        <p className="text-gray-600 mb-6">Thank you for your purchase</p>
+        {/* Account Creation Form */}
+        <div className="bg-white border-2 border-yellow-300 rounded-2xl p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            {isLogin ? 'Login to Access' : 'Create Your Account'}
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            {isLogin ? 'Login with your password' : 'Set a password to access your course'}
+          </p>
+          
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4 text-sm">
+              {error}
+            </div>
+          )}
 
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-gray-700 mb-1">Order ID</p>
-          <p className="font-mono text-xs text-gray-900 break-all">{orderId}</p>
-        </div>
+          <form onSubmit={isLogin ? handleLogin : handleCreateAccount} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={pendingPurchase.customerEmail}
+                disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-600"
+              />
+            </div>
 
-        <div className="space-y-3">
-          <Button 
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-6"
-            asChild
-          >
-            <Link href="/dashboard">
-              <Download className="mr-2 w-5 h-5" />
-              Download Your Courses
-            </Link>
-          </Button>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                {isLogin ? 'Password' : 'Create Password'}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                placeholder="Enter password"
+                required
+                minLength={6}
+              />
+            </div>
 
-          <Button 
+            <Button
+              type="submit"
+              disabled={processing}
+              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {isLogin ? 'Logging in...' : 'Creating Account...'}
+                </>
+              ) : (
+                isLogin ? 'Login & Access Course' : 'Create Account & Access Course'
+              )}
+            </Button>
+          </form>
+
+          <div className="my-4 text-center text-xs text-gray-500">OR</div>
+
+          <Button
+            onClick={handleGoogleAuth}
+            disabled={processing}
             variant="outline"
-            className="w-full border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 py-6"
-            asChild
+            className="w-full border-2 border-gray-300 py-3"
           >
-            <Link href="/">
-              Back to Home
-            </Link>
+            Continue with Google
           </Button>
-        </div>
 
-        <p className="text-xs text-gray-500 mt-6">
-          A confirmation email has been sent to your email address
-        </p>
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => {
+                setIsLogin(!isLogin)
+                setError("")
+                setPassword("")
+              }}
+              className="text-sm text-yellow-600 hover:underline"
+            >
+              {isLogin ? "Don't have an account? Create one" : 'Already have an account? Login'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// Main page component with Suspense wrapper
 export default function PaymentSuccessPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center px-4">
-        <div className="text-center">
-          <Loader2 className="w-16 h-16 text-yellow-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Loading...</h2>
-          <p className="text-gray-600">Please wait</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-white flex items-center justify-center">
+        <Loader2 className="w-16 h-16 text-yellow-600 animate-spin" />
       </div>
     }>
       <PaymentSuccessContent />

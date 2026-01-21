@@ -12,6 +12,21 @@ export interface CustomerInfo {
   phone: string
 }
 
+// Helper function to get the base URL
+function getBaseUrl(): string {
+  // Use environment variable if available
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  
+  // Fallback for development
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  
+  return 'http://localhost:3000';
+}
+
 export async function createPaymentOrder(
   product: ProductInfo,
   customer: CustomerInfo
@@ -28,6 +43,8 @@ export async function createPaymentOrder(
         customerEmail: customer.email,
         customerName: customer.name,
         customerPhone: customer.phone,
+        returnUrl: `${getBaseUrl()}/payment/success`, // Return URL after payment
+        notifyUrl: `${getBaseUrl()}/api/payment/webhook`, // Webhook URL
       }),
     })
 
@@ -50,14 +67,14 @@ export async function initiatePayment(paymentSessionId: string) {
     const { load } = await import('@cashfreepayments/cashfree-js')
     
     const cashfree = await load({
-      mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'PRODUCTION' 
+      mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'PROD' 
         ? 'production' 
         : 'sandbox'
     })
 
     const checkoutOptions = {
       paymentSessionId: paymentSessionId,
-      returnUrl: process.env.NEXT_PUBLIC_PAYMENT_SUCCESS_URL,
+      returnUrl: `${getBaseUrl()}/payment/success`,
     }
 
     cashfree.checkout(checkoutOptions)

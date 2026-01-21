@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     // Generate unique order ID
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-    // Determine API URL based on environment
-    const apiUrl = process.env.CASHFREE_ENV === 'PRODUCTION'
+    // ✅ FIX: Change PRODUCTION to PROD
+    const apiUrl = process.env.CASHFREE_ENV === 'PROD'
       ? 'https://api.cashfree.com/pg/orders'
       : 'https://sandbox.cashfree.com/pg/orders'
 
