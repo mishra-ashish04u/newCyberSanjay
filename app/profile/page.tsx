@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { User, Mail, MapPin, GraduationCap, Briefcase, Target, Code, Edit2, Camera, Linkedin, Github, Twitter, Globe, Instagram } from "lucide-react"
+import { useAuth } from "@/app/hooks/useAuth"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { Footer } from "@/components/footer"
+import { Header } from "@/components/header"
 
 // Firebase Web SDK via CDN
 declare global {
@@ -192,41 +197,27 @@ export default function ProfilePage() {
 
   // Load purchases from Firestore
   const loadPurchases = async (uid: string) => {
-    setLoadingPurchases(true)
-    try {
-      const db = window.firebase.firestore()
-      
-      // Method 1: Get purchases from separate collection
-      const purchasesSnapshot = await db.collection('purchases')
-        .where('userId', '==', uid)
-        .orderBy('purchaseDate', 'desc')
-        .get()
-      
-      const purchasesList = purchasesSnapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-      }))
-      
-      setPurchases(purchasesList)
-    } catch (error) {
-      console.error("Error loading purchases:", error)
-      
-      // Fallback: Try getting from user document
-      try {
-        const db = window.firebase.firestore()
-        const userDoc = await db.collection('users').doc(uid).get()
-        if (userDoc.exists) {
-          const data = userDoc.data()
-          const purchasedItems = data.purchasedItems || []
-          setPurchases(purchasedItems)
-        }
-      } catch (fallbackError) {
-        console.error("Fallback error:", fallbackError)
-      }
-    } finally {
-      setLoadingPurchases(false)
-    }
+  setLoadingPurchases(true)
+  try {
+    const q = query(
+      collection(db, "purchases"),
+      where("userId", "==", uid)
+    )
+
+    const snap = await getDocs(q)
+    const list = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }))
+
+    setPurchases(list)
+  } catch (err) {
+    console.error("Failed to load purchases:", err)
+  } finally {
+    setLoadingPurchases(false)
   }
+}
+
 
   // Load purchases when switching to purchases tab
   useEffect(() => {
@@ -249,6 +240,10 @@ export default function ProfilePage() {
   const profileCompletion = calculateProfileCompletion()
 
   return (
+
+    <>
+          <Header />
+
     <main className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-100 p-6">
       <div className="max-w-6xl mx-auto space-y-6">
 
@@ -586,6 +581,8 @@ export default function ProfilePage() {
         )}
       </div>
     </main>
+    <Footer />
+        </>
   )
 }
 
