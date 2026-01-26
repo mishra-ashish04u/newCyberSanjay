@@ -4,7 +4,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckoutModal } from "@/components/dashboard/payment/checkout-modal"
+import { CheckoutModal } from "@/components/payment/checkout-modal"
 import { useRouter } from "next/navigation"
 
 export default function CoursePage() {

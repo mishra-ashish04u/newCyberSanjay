@@ -146,6 +146,7 @@ export function CommunitySection() {
             </div>
 
             <div className="space-y-3">
+              <a href="/community">
               <Button
                 size="lg"
                 className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-5 rounded-lg shadow-lg"
@@ -153,6 +154,7 @@ export function CommunitySection() {
                 Join Community — Free
                 <Users className="w-4 h-4 ml-2" />
               </Button>
+              </a>
 
               <p className="text-center text-xs text-gray-500">
                 100% Free • No Credit Card • Join 500+ Members

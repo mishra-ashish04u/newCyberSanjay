@@ -82,8 +82,18 @@ export function CoursesSection() {
             </ul>
 
             <CheckoutButton
-              product={PRODUCTS.starterKit}
-              className="w-full border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 font-semibold py-5 rounded-lg text-sm"
+              product={{
+                itemId: "starter_kit_pdf_2024",
+                name: "Starter Kit - Ethical Hacking Roadmap",
+                type: "pdf",
+                amount: 99,
+                metadata: {
+                  downloadUrl: "https://raw.githubusercontent.com/mishra-ashish04u/cybersanjay-courses/main/starter-kit/starter-kit.pdf",
+                  githubPath: "starter-kit/starter-kit.pdf",
+                  thumbnail: "/images/starter-kit-thumb.jpg"
+                }
+              }}
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold"
             >
               Buy Now — ₹99
             </CheckoutButton>
@@ -120,8 +130,18 @@ export function CoursesSection() {
             </ul>
 
             <CheckoutButton
-              product={PRODUCTS.resumePack}
-              className="w-full border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 font-semibold py-5 rounded-lg text-sm"
+              product={{
+                itemId: "resume_pack_pdf_2024",
+                name: "Resume Pack - Professional Templates",
+                type: "pdf",
+                amount: 99,
+                metadata: {
+                  downloadUrl: "https://raw.githubusercontent.com/mishra-ashish04u/cybersanjay-courses/main/resume-pack/resume-pack.pdf",
+                  githubPath: "resume-pack/resume-pack.pdf",
+                  thumbnail: "/images/resume-pack-thumb.jpg"
+                }
+              }}
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold"
             >
               Buy Now — ₹99
             </CheckoutButton>
@@ -166,8 +186,17 @@ export function CoursesSection() {
             </ul>
 
             <CheckoutButton
-              product={PRODUCTS.bundle}
-              className="w-full bg-black hover:bg-gray-900 text-yellow-400 font-bold py-5 rounded-lg shadow-lg text-sm"
+              product={{
+                itemId: "complete_bundle_2024",
+                name: "Complete Bundle",
+                type: "combo",
+                amount: 149,
+                metadata: {
+                  githubPath: "complete-bundle",
+                  thumbnail: "/images/bundle-thumb.jpg"
+                }
+              }}
+              className="w-full bg-black hover:bg-gray-800 text-yellow-400"
             >
               Buy Now — ₹149
             </CheckoutButton>

@@ -1,86 +1,175 @@
 // lib/payment/cashfree.ts
+
 export interface ProductInfo {
-  id: string
+  itemId: string
   name: string
+  type: string
   amount: number
-  description: string
+  metadata?: {
+    downloadUrl?: string
+    githubPath?: string
+    thumbnail?: string
+  }
 }
 
-export interface CustomerInfo {
+interface CustomerInfo {
   name: string
   email: string
   phone: string
 }
 
-// Helper function to get the base URL
-function getBaseUrl(): string {
-  // Use environment variable if available
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
+declare global {
+  interface Window {
+    Cashfree: any
   }
-  
-  // Fallback for development
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  
-  return 'http://localhost:3000';
 }
 
-export async function createPaymentOrder(
+// Load Cashfree SDK
+export const loadCashfreeSDK = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (window.Cashfree) {
+      console.log('✅ Cashfree SDK already loaded')
+      resolve()
+      return
+    }
+
+    const existingScript = document.querySelector('script[src*="cashfree"]')
+    if (existingScript) {
+      console.log('⏳ Cashfree SDK is loading...')
+      
+      const checkSDK = setInterval(() => {
+        if (window.Cashfree) {
+          clearInterval(checkSDK)
+          console.log('✅ Cashfree SDK ready')
+          resolve()
+        }
+      }, 100)
+
+      setTimeout(() => {
+        clearInterval(checkSDK)
+        if (!window.Cashfree) {
+          reject(new Error('Cashfree SDK load timeout'))
+        }
+      }, 10000)
+      
+      return
+    }
+
+    console.log('📦 Loading Cashfree SDK...')
+    
+    const script = document.createElement('script')
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
+    script.type = 'text/javascript'
+    script.async = true
+    
+    script.onload = () => {
+      console.log('📥 Script loaded, waiting for SDK...')
+      
+      const checkSDK = () => {
+        if (window.Cashfree) {
+          console.log('✅ Cashfree SDK ready')
+          resolve()
+        } else {
+          setTimeout(checkSDK, 100)
+        }
+      }
+      
+      checkSDK()
+      
+      setTimeout(() => {
+        if (!window.Cashfree) {
+          reject(new Error('Cashfree SDK loaded but not initialized'))
+        }
+      }, 5000)
+    }
+
+    script.onerror = () => {
+      console.error('❌ Failed to load Cashfree SDK script')
+      reject(new Error('Failed to load Cashfree SDK. Please check your internet connection.'))
+    }
+
+    document.head.appendChild(script)
+  })
+}
+
+// Create Payment Order (calls your API)
+export const createPaymentOrder = async (
   product: ProductInfo,
-  customer: CustomerInfo
-) {
+  customerInfo: CustomerInfo
+) => {
   try {
+    console.log('📝 Creating payment order...')
+    
     const response = await fetch('/api/payment/create-order', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        productName: product.name,
+        itemId: product.itemId,
+        itemName: product.name,
+        itemType: product.type,
         amount: product.amount,
-        customerEmail: customer.email,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        returnUrl: `${getBaseUrl()}/payment/success`, // Return URL after payment
-        notifyUrl: `${getBaseUrl()}/api/payment/webhook`, // Webhook URL
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        metadata: product.metadata
       }),
     })
 
-    const data = await response.json()
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to create order')
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create order')
     }
 
-    return data
-  } catch (error) {
-    console.error('Error creating payment order:', error)
+    const data = await response.json()
+    console.log('✅ Order created:', data.orderId)
+    
+    return {
+      orderId: data.orderId,
+      paymentSessionId: data.paymentSessionId,
+      orderToken: data.orderToken
+    }
+    
+  } catch (error: any) {
+    console.error('❌ Create order error:', error)
     throw error
   }
 }
 
-export async function initiatePayment(paymentSessionId: string) {
+// Initiate Payment (opens Cashfree checkout)
+export const initiatePayment = async (
+  paymentSessionId: string,
+  mode: 'sandbox' | 'production' = 'sandbox'
+) => {
   try {
-    // Dynamically import Cashfree SDK
-    const { load } = await import('@cashfreepayments/cashfree-js')
+    console.log('🔄 Initiating payment...')
+    console.log('💳 Session ID:', paymentSessionId)
     
-    const cashfree = await load({
-      mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'PROD' 
-        ? 'production' 
-        : 'sandbox'
-    })
+    await loadCashfreeSDK()
+
+    if (!window.Cashfree) {
+      throw new Error('Cashfree SDK not available')
+    }
+
+    console.log('🔧 Initializing Cashfree...')
+    const cashfree = await window.Cashfree({ mode })
 
     const checkoutOptions = {
       paymentSessionId: paymentSessionId,
-      returnUrl: `${getBaseUrl()}/payment/success`,
+      redirectTarget: '_self'
     }
 
-    cashfree.checkout(checkoutOptions)
+    console.log('🚀 Opening checkout...')
+    await cashfree.checkout(checkoutOptions)
     
-  } catch (error) {
-    console.error('Error initiating payment:', error)
-    throw error
+  } catch (error: any) {
+    console.error('❌ Payment error:', error)
+    
+    if (error.message?.includes('Failed to load')) {
+      throw new Error('Unable to connect to payment gateway. Please check your internet connection and try again.')
+    }
+    
+    throw new Error(error.message || 'Payment initialization failed. Please try again.')
   }
 }

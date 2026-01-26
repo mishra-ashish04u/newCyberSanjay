@@ -9,7 +9,8 @@ import {
   where, 
   getDocs,
   serverTimestamp,
-  runTransaction
+  runTransaction,
+  deleteDoc  // ✅ ADDED
 } from 'firebase/firestore'
 
 /**
@@ -133,7 +134,7 @@ export async function createPendingPurchase(data: {
 
 /**
  * R5: Link pending purchase to user account (auto-link)
- * Called after user logs in or signs up
+ * Moves data from pending_purchases to purchases and DELETES pending record
  */
 export async function linkPurchaseToUser(
   orderId: string,
@@ -174,20 +175,17 @@ export async function linkPurchaseToUser(
         metadata: pendingData.metadata
       }
 
+      // Add to main purchases collection
       transaction.set(purchaseRef, purchaseData)
 
-      // Also create in user's subcollection for easy queries
+      // Add to user's subcollection
       const userPurchaseRef = doc(db, 'users', userId, 'purchases', purchaseId)
       transaction.set(userPurchaseRef, purchaseData)
 
-      // Mark pending purchase as linked
-      transaction.update(pendingRef, {
-        accountLinked: true,
-        linkedUserId: userId,
-        linkedAt: serverTimestamp()
-      })
+      // ✅ DELETE the pending purchase (instead of marking as linked)
+      transaction.delete(pendingRef)
 
-      console.log('✅ Purchase linked to user:', userId, orderId)
+      console.log('✅ Purchase moved to purchases and deleted from pending:', orderId)
       return { success: true }
     })
 
@@ -198,8 +196,8 @@ export async function linkPurchaseToUser(
 }
 
 /**
- * R5: Auto-link all pending purchases for an email
- * Called when user logs in with existing email
+ * R5: Auto-link all pending purchases for an email (including bundle items)
+ * Moves all pending purchases to purchases collection and DELETES them
  */
 export async function linkAllPendingPurchases(
   email: string,
@@ -215,12 +213,39 @@ export async function linkAllPendingPurchases(
     const snapshot = await getDocs(pendingQuery)
     let linkedCount = 0
 
-    for (const doc of snapshot.docs) {
-      const result = await linkPurchaseToUser(doc.id, userId)
-      if (result.success) linkedCount++
+    for (const docSnap of snapshot.docs) {
+      const pendingData = docSnap.data() as PendingPurchase
+      
+      // Create purchase record
+      const purchaseId = `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const purchaseData: Purchase = {
+        purchaseId,
+        userId,
+        orderId: pendingData.orderId,
+        email: pendingData.customerEmail,
+        itemId: pendingData.itemId,
+        itemName: pendingData.itemName,
+        itemType: pendingData.itemType,
+        amount: pendingData.amount,
+        status: 'active',
+        purchaseDate: serverTimestamp(),
+        metadata: pendingData.metadata
+      }
+
+      // Add to purchases collection
+      await setDoc(doc(db, 'purchases', purchaseId), purchaseData)
+
+      // Add to user's subcollection
+      await setDoc(doc(db, 'users', userId, 'purchases', purchaseId), purchaseData)
+
+      // ✅ DELETE the pending purchase
+      await deleteDoc(doc(db, 'pending_purchases', docSnap.id))
+
+      linkedCount++
+      console.log(`✅ Moved purchase ${docSnap.id} and deleted from pending`)
     }
 
-    console.log(`✅ Linked ${linkedCount} pending purchases for ${email}`)
+    console.log(`✅ Linked and deleted ${linkedCount} pending purchases for ${email}`)
     return { success: true, linkedCount }
 
   } catch (error: any) {
@@ -230,21 +255,37 @@ export async function linkAllPendingPurchases(
 }
 
 /**
- * Get pending purchase by order ID
+ * Get pending purchase by order ID (handles bundle suffixes)
  */
 export async function getPendingPurchase(
   orderId: string
 ): Promise<PendingPurchase | null> {
   try {
-    const docRef = doc(db, 'pending_purchases', orderId)
-    const docSnap = await getDoc(docRef)
+    console.log('🔍 Fetching pending purchase for orderId:', orderId)
+    
+    // First try direct orderId
+    let docRef = doc(db, 'pending_purchases', orderId)
+    let docSnap = await getDoc(docRef)
     
     if (docSnap.exists()) {
+      console.log('✅ Found pending purchase (direct):', orderId)
       return docSnap.data() as PendingPurchase
     }
+
+    // If not found, try with _starter suffix (for bundle)
+    console.log('⚠️ Direct orderId not found, trying with _starter suffix')
+    docRef = doc(db, 'pending_purchases', `${orderId}_starter`)
+    docSnap = await getDoc(docRef)
+    
+    if (docSnap.exists()) {
+      console.log('✅ Found bundle pending purchase with _starter suffix')
+      return docSnap.data() as PendingPurchase
+    }
+
+    console.log('❌ No pending purchase found for:', orderId)
     return null
   } catch (error) {
-    console.error('Error fetching pending purchase:', error)
+    console.error('❌ Error fetching pending purchase:', error)
     return null
   }
 }

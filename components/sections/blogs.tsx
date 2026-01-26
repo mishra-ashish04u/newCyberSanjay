@@ -136,12 +136,15 @@ export function BlogsSection() {
             </div>
 
             {/* View All CTA */}
+            <a href="/blogs">
             <Button
               className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-5 rounded-xl shadow-lg"
             >
               View All Blogs
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
+            </a>
+
           </div>
         </div>
 

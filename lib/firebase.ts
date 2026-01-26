@@ -12,9 +12,19 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
+// Debug: Check if config is loaded
+console.log('🔥 Firebase Config Status:', {
+  apiKey: firebaseConfig.apiKey ? '✅ Loaded' : '❌ Missing',
+  authDomain: firebaseConfig.authDomain ? '✅ Loaded' : '❌ Missing',
+  projectId: firebaseConfig.projectId ? '✅ Loaded' : '❌ Missing',
+  allConfigPresent: Object.values(firebaseConfig).every(val => val !== undefined)
+})
+
 // Initialize Firebase (only once)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 
 // Export auth and db instances
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+
+console.log('🔥 Firebase initialized:', app.name)

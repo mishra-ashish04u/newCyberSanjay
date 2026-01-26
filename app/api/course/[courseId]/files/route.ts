@@ -5,7 +5,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { courseId: string } }
+  { params }: { params: Promise<{ courseId: string }> }
 ) {
   try {
     // Get user from session (you'll need to implement auth middleware)
@@ -18,7 +18,7 @@ export async function GET(
       )
     }
 
-    const { courseId } = params
+    const { courseId } = await params
 
     // Verify user has purchased this course
     const purchasesRef = collection(db, 'users', userId, 'purchases')

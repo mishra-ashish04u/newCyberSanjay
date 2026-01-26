@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { User, Mail, MapPin, GraduationCap, Briefcase, Target, Code, Edit2, Camera, Linkedin, Github, Twitter, Globe, Instagram } from "lucide-react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { collection, query, where, getDocs } from "firebase/firestore"
@@ -15,7 +16,7 @@ declare global {
   }
 }
 
-export default function ProfilePage() {
+function ProfilePageContent()  {
   const [activeTab, setActiveTab] = useState<"overview" | "learning" | "purchases" | "activity">("overview")
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -44,6 +45,16 @@ export default function ProfilePage() {
   })
   const [purchases, setPurchases] = useState<any[]>([])
   const [loadingPurchases, setLoadingPurchases] = useState(false)
+
+  // Read tab from URL parameter on mount
+const searchParams = useSearchParams()
+
+useEffect(() => {
+  const tabParam = searchParams.get('tab')
+  if (tabParam && ['overview', 'learning', 'purchases', 'activity'].includes(tabParam)) {
+    setActiveTab(tabParam as "overview" | "learning" | "purchases" | "activity")
+  }
+}, [searchParams])
 
   // Initialize Firebase
   useEffect(() => {
@@ -726,5 +737,19 @@ function PurchaseCard({ purchase }: { purchase: any }) {
         </div>
       </div>
     </div>
+  )
+}
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading...</p>
+        </div>
+      </main>
+    }>
+      <ProfilePageContent />
+    </Suspense>
   )
 }

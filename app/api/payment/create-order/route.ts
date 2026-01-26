@@ -1,10 +1,6 @@
 // app/api/payment/create-order/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-/**
- * R1: Create payment order without requiring login
- * Accepts guest user details
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -16,7 +12,7 @@ export async function POST(request: NextRequest) {
       customerEmail, 
       customerName, 
       customerPhone,
-      metadata // Optional: thumbnail, description, urls, etc.
+      metadata
     } = body
 
     // Validate required fields
@@ -27,53 +23,49 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(customerEmail)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email format' },
-        { status: 400 }
-      )
-    }
-
-    // Generate unique order ID (with timestamp for ordering)
+    // Generate unique order ID
     const timestamp = Date.now()
     const random = Math.random().toString(36).substr(2, 9)
     const orderId = `order_${timestamp}_${random}`
 
     // Determine API URL
-    const apiUrl = process.env.CASHFREE_ENV === 'PROD'
+    const apiUrl = process.env.CASHFREE_ENV?.toUpperCase() === 'PROD'
       ? 'https://api.cashfree.com/pg/orders'
       : 'https://sandbox.cashfree.com/pg/orders'
 
-    // Prepare order request for Cashfree
-    const orderRequest = {
-      order_id: orderId,
-      order_amount: amount,
-      order_currency: 'INR',
-      customer_details: {
-        customer_id: customerEmail.replace('@', '_').replace(/\./g, '_'),
-        customer_email: customerEmail,
-        customer_name: customerName,
-        customer_phone: customerPhone || '9999999999'
-      },
-      order_meta: {
-        return_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?order_id=${orderId}`,
-        notify_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/webhook`
-      },
-      order_note: `${itemType}: ${itemName}`,
-      order_tags: {
-        itemId,
-        itemName,
-        itemType,
-        metadata: JSON.stringify(metadata || {})
-      }
-    }
+    // CORRECT Cashfree format with ALL required fields
+    // CORRECT Cashfree format with ALL required fields
+const cashfreeRequest = {
+  order_id: orderId,
+  order_amount: parseFloat(amount.toString()),
+  order_currency: 'INR',
+  customer_details: {
+    customer_id: `cust_${timestamp}`,
+    customer_email: customerEmail.toLowerCase().trim(),
+    customer_phone: customerPhone || '9999999999',
+    customer_name: customerName.trim()
+  },
+  order_meta: {
+    return_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?order_id=${orderId}`,
+    notify_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/webhook`
+  },
+  order_note: itemName,
+  // ✅ Flat key-value pairs, all strings
+  order_tags: {
+    itemId: itemId,
+    itemType: itemType,
+    itemName: itemName,
+    downloadUrl: metadata?.downloadUrl || '',
+    githubPath: metadata?.githubPath || '',
+    thumbnail: metadata?.thumbnail || ''
+  }
+}
 
-    console.log('🔵 Creating Cashfree order:', {
-      orderId,
-      amount,
-      customer: customerEmail
+    console.log('🔵 Cashfree Request URL:', apiUrl)
+    console.log('🔵 Cashfree Request Body:', JSON.stringify(cashfreeRequest, null, 2))
+    console.log('🔵 Using credentials:', {
+      app_id: process.env.CASHFREE_APP_ID,
+      env: process.env.CASHFREE_ENV
     })
 
     // Call Cashfree API
@@ -85,16 +77,23 @@ export async function POST(request: NextRequest) {
         'x-client-secret': process.env.CASHFREE_SECRET_KEY!,
         'x-api-version': '2023-08-01'
       },
-      body: JSON.stringify(orderRequest)
+      body: JSON.stringify(cashfreeRequest)
     })
 
     const responseData = await response.json()
 
     console.log('🔵 Cashfree response status:', response.status)
+    console.log('🔵 Cashfree response body:', JSON.stringify(responseData, null, 2))
 
     if (!response.ok) {
       console.error('❌ Cashfree API error:', responseData)
-      throw new Error(responseData.message || 'Failed to create order')
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: responseData.message || 'Failed to create order' 
+        },
+        { status: response.status }
+      )
     }
 
     console.log('✅ Order created successfully:', orderId)
@@ -104,7 +103,6 @@ export async function POST(request: NextRequest) {
       orderId,
       paymentSessionId: responseData.payment_session_id,
       orderToken: responseData.order_token,
-      // Return these for verification later
       itemId,
       itemName,
       itemType,

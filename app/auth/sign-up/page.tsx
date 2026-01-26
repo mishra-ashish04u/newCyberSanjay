@@ -11,6 +11,7 @@ import {
 } from "firebase/auth"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { auth, db } from "@/lib/firebase"
+import { linkAllPendingPurchases } from "@/lib/firestore/purchases"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -55,6 +56,10 @@ export default function SignUpPage() {
         },
       })
 
+      // ✅ Link any pending purchases to this new account
+      const linkResult = await linkAllPendingPurchases(email, user.uid)
+      console.log(`✅ Linked ${linkResult.linkedCount} pending purchases during email signup`)
+
       // Redirect to verify email page
       router.push("/auth/verify-email")
     } catch (err: any) {
@@ -89,7 +94,13 @@ export default function SignUpPage() {
         { merge: true }
       )
 
-      router.push("/dashboard")
+      // ✅ Link any pending purchases to this Google account
+      if (user.email) {
+        const linkResult = await linkAllPendingPurchases(user.email, user.uid)
+        console.log(`✅ Linked ${linkResult.linkedCount} pending purchases during Google signup`)
+      }
+
+      router.push("/profile")
     } catch (err: any) {
       setError(err.message || "Google signup failed")
     } finally {
@@ -142,7 +153,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-400 text-black py-2 rounded font-medium hover:bg-yellow-500 transition"
+            className="w-full bg-yellow-400 text-black py-2 rounded font-medium hover:bg-yellow-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Creating account..." : "Create account"}
           </button>
@@ -155,10 +166,17 @@ export default function SignUpPage() {
         <button
           onClick={handleGoogleSignUp}
           disabled={loading}
-          className="w-full border border-gray-300 py-2 rounded hover:bg-yellow-50 transition"
+          className="w-full border border-gray-300 py-2 rounded hover:bg-yellow-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Continue with Google
         </button>
+
+        <p className="text-xs text-center text-gray-500 mt-4">
+          Already have an account?{" "}
+          <a href="/auth/login" className="text-yellow-600 hover:underline font-medium">
+            Login
+          </a>
+        </p>
       </div>
     </main>
   )
